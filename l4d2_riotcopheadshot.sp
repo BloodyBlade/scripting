@@ -1,108 +1,103 @@
-#include <sourcemod>
-#define PLUGIN_VERSION "1.3"
-#define PLUGIN_NAME "L4D2 Riot Cop Head Shot"
 #pragma semicolon 1
+#pragma newdecls required
+
+#include <sourcemod>
 #include <sdkhooks>
 #include <sdktools>
 
-new Handle:g_cvarEnable;
-new bool:g_bEnabled;
-new Handle:g_cvarDebug;
-new g_iDebug;
-new Handle:g_cvarRiotCopHeadShotEnable;
-new g_iRiotCopHeadShot_HeadEnable;
-new Handle:g_cvarRiotCopBodyShotDivisor;
-new Float:g_fRiotCopHeadShot_BodyDivisor;
-new Handle:g_cvarFallenHeadShotMultiplier;
-new Float:g_fFallenHeadMultiplier;
-new Handle:g_cvarRiotPenetrationDamage;
-new Float:g_fPenetrationDamage;
+#define PLUGIN_VERSION "1.3"
+#define CVAR_FLAGS FCVAR_NOTIFY|FCVAR_SPONLY
 
-public Plugin:myinfo = 
+ConVar g_cvarEnable, g_cvarDebug, g_cvarRiotCopHeadShotEnable, g_cvarRiotCopBodyShotDivisor, g_cvarFallenHeadShotMultiplier, g_cvarRiotPenetrationDamage;
+bool g_bEnabled = false, g_bDebug = false;
+int g_iRiotCopHeadShot_HeadEnable = 0;
+float g_fRiotCopHeadShot_BodyDivisor = 0.0, g_fFallenHeadMultiplier = 0.0, g_fPenetrationDamage = 0.0;
+
+public Plugin myinfo = 
 {
-	name = PLUGIN_NAME,
-	author = "dcx2 | helped by Mr. Zero / McFlurry",
+	name = "L4D2 Riot Cop Head Shot",
+	author = "dcx2 | helped by Mr. Zero / McFlurry(Edit. by BloodyBlade)",
 	description = "Kills riot cops instantly if you shoot them in the head, makes body shots hurt riot cops a little bit, multiplies damage to fallen and Jimmy Gibbs from head shots",
 	version = PLUGIN_VERSION,
 	url = "www.AlliedMods.net"
 }
 
-public OnPluginStart()
+public void OnPluginStart()
 {
 	// cache my convars
-	g_cvarEnable = CreateConVar("sm_riotcopheadshot_enable", "1.0", "Enables this plugin.", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
-	g_cvarRiotCopHeadShotEnable = CreateConVar("sm_riotcopheadshot_riotheadenable", "1.0", "0: disabled\n1: Head shots instantly kill riot cops\n2: Head shots do 1x damage", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
-	g_cvarRiotCopBodyShotDivisor = CreateConVar("sm_riotcopheadshot_riotbodydivisor", "40.0", "How much to divide body shot damage by (0 will disable)", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
-	g_cvarFallenHeadShotMultiplier = CreateConVar("sm_riotcopheadshot_fallenheadmultiplier", "12.0", "How much to multiply fallen head shots by (0 will disable)", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
-	g_cvarRiotPenetrationDamage = CreateConVar("sm_riotcopheadshot_bodypenetrationdamage", "13.0", "How much damage penetrating weapons should do to the body of riot cops", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
-	g_cvarDebug = CreateConVar("sm_riotcopheadshot_debug", "0.0", "Print debug output.", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
-	CreateConVar("sm_riotcopheadshot_ver", PLUGIN_VERSION, PLUGIN_NAME, FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
+	CreateConVar("sm_riotcopheadshot_ver", PLUGIN_VERSION, "L4D2 Riot Cop Head Shot plugin version", CVAR_FLAGS|FCVAR_DONTRECORD);
+	g_cvarEnable = CreateConVar("sm_riotcopheadshot_enable", "1", "Enables this plugin.", CVAR_FLAGS);
+	g_cvarRiotCopHeadShotEnable = CreateConVar("sm_riotcopheadshot_riotheadenable", "1.0", "0: disabled\n1: Head shots instantly kill riot cops\n2: Head shots do 1x damage", CVAR_FLAGS);
+	g_cvarRiotCopBodyShotDivisor = CreateConVar("sm_riotcopheadshot_riotbodydivisor", "40.0", "How much to divide body shot damage by (0 will disable)", CVAR_FLAGS);
+	g_cvarFallenHeadShotMultiplier = CreateConVar("sm_riotcopheadshot_fallenheadmultiplier", "12.0", "How much to multiply fallen head shots by (0 will disable)", CVAR_FLAGS);
+	g_cvarRiotPenetrationDamage = CreateConVar("sm_riotcopheadshot_bodypenetrationdamage", "13.0", "How much damage penetrating weapons should do to the body of riot cops", CVAR_FLAGS);
+	g_cvarDebug = CreateConVar("sm_riotcopheadshot_debug", "0.0", "Print debug output.", CVAR_FLAGS);
 
 	AutoExecConfig(true, "L4D2RiotCopHeadShot");
-	
+
 	// be nice and listen for changes
-	HookConVarChange(g_cvarEnable, OnRCHSEnableChanged);
-	HookConVarChange(g_cvarRiotCopHeadShotEnable, OnRCHS_RCHeadChanged);
-	HookConVarChange(g_cvarRiotCopBodyShotDivisor, OnRCHS_RCBodyChanged);
-	HookConVarChange(g_cvarFallenHeadShotMultiplier, OnRCHS_FHeadChanged);
-	HookConVarChange(g_cvarRiotPenetrationDamage, OnRCHS_RiotPenDamage);
-	HookConVarChange(g_cvarDebug, OnRCHSDebugChanged);
+	g_cvarEnable.AddChangeHook(OnRCHSEnableChanged);
+	g_cvarRiotCopHeadShotEnable.AddChangeHook(OnRCHS_RCHeadChanged);
+	g_cvarRiotCopBodyShotDivisor.AddChangeHook(OnRCHS_RCBodyChanged);
+	g_cvarFallenHeadShotMultiplier.AddChangeHook(OnRCHS_FHeadChanged);
+	g_cvarRiotPenetrationDamage.AddChangeHook(OnRCHS_RiotPenDamage);
+	g_cvarDebug.AddChangeHook(OnRCHSDebugChanged);
 
 	// get cvars after AutoExecConfig
-	g_bEnabled = GetConVarBool(g_cvarEnable);
-	g_iRiotCopHeadShot_HeadEnable = GetConVarInt(g_cvarRiotCopHeadShotEnable);
-	g_fRiotCopHeadShot_BodyDivisor = GetConVarFloat(g_cvarRiotCopBodyShotDivisor);
-	g_fFallenHeadMultiplier = GetConVarFloat(g_cvarFallenHeadShotMultiplier);
-	g_fPenetrationDamage = GetConVarFloat(g_cvarRiotPenetrationDamage);
-	g_iDebug = GetConVarInt(g_cvarDebug);
-	
-	if (g_iDebug)
+	g_bEnabled = g_cvarEnable.BoolValue;
+	g_iRiotCopHeadShot_HeadEnable = g_cvarRiotCopHeadShotEnable.IntValue;
+	g_fRiotCopHeadShot_BodyDivisor = g_cvarRiotCopBodyShotDivisor.FloatValue;
+	g_fFallenHeadMultiplier = g_cvarFallenHeadShotMultiplier.FloatValue;
+	g_fPenetrationDamage = g_cvarRiotPenetrationDamage.FloatValue;
+	g_bDebug = g_cvarDebug.BoolValue;
+
+	if (g_bDebug)
 	{
 		HookEvent("infected_hurt", Event_InfectedHurt);
 	}
 }
 
-public OnRCHSEnableChanged(Handle:cvar, const String:oldVal[], const String:newVal[])
+void OnRCHSEnableChanged(ConVar cvar, const char[] oldVal, const char[] newVal)
 {
 	g_bEnabled = StringToInt(newVal) == 1;
 }
 
-public OnRCHSDebugChanged(Handle:cvar, const String:oldVal[], const String:newVal[])
+void OnRCHSDebugChanged(ConVar cvar, const char[] oldVal, const char[] newVal)
 {
-	g_iDebug = StringToInt(newVal);
-	new oldDebug = StringToInt(oldVal);
-	if (g_iDebug && !oldDebug)
+	g_bDebug = view_as<bool>(StringToInt(newVal));
+	bool oldDebug = view_as<bool>(StringToInt(oldVal));
+	if (g_bDebug && !oldDebug)
 	{
 		HookEvent("infected_hurt", Event_InfectedHurt);
 	}
-	else if (oldDebug && !g_iDebug)
+	else if (oldDebug && !g_bDebug)
 	{
 		UnhookEvent("infected_hurt", Event_InfectedHurt);
 	}
 }
 
-public OnRCHS_RCHeadChanged(Handle:cvar, const String:oldVal[], const String:newVal[])
+void OnRCHS_RCHeadChanged(ConVar cvar, const char[] oldVal, const char[] newVal)
 {
 	g_iRiotCopHeadShot_HeadEnable = StringToInt(newVal);
 }
 
-public OnRCHS_RCBodyChanged(Handle:cvar, const String:oldVal[], const String:newVal[])
+void OnRCHS_RCBodyChanged(ConVar cvar, const char[] oldVal, const char[] newVal)
 {
 	g_fRiotCopHeadShot_BodyDivisor = StringToFloat(newVal);
 }
 
-public OnRCHS_FHeadChanged(Handle:cvar, const String:oldVal[], const String:newVal[])
+void OnRCHS_FHeadChanged(ConVar cvar, const char[] oldVal, const char[] newVal)
 {
 	g_fFallenHeadMultiplier = StringToFloat(newVal);
 }
 
-public OnRCHS_RiotPenDamage(Handle:cvar, const String:oldVal[], const String:newVal[])
+void OnRCHS_RiotPenDamage(ConVar cvar, const char[] oldVal, const char[] newVal)
 {
 	g_fPenetrationDamage = StringToFloat(newVal);
 }
 
 // Listen for when infected are created, then listen to them spawn
-public OnEntityCreated(entity, const String:classname[])
+public void OnEntityCreated(int entity, const char[] classname)
 {
 	if (entity <= 0 || entity > 2048) return;
 
@@ -113,25 +108,25 @@ public OnEntityCreated(entity, const String:classname[])
 }
 
 // Model name does not exist until after the uncommon is spawned
-public RiotCop_SpawnPost(entity)
+void RiotCop_SpawnPost(int entity)
 {
 	if (isRiotCop(entity))
 	{
 		SDKHook(entity, SDKHook_TraceAttack, RiotCop_TraceAttack);
-		if (g_iDebug)	PrintToChatAll("Hooked riot cop for head shot");
+		if (g_bDebug)	PrintToChatAll("Hooked riot cop for head shot");
 	}
 	else if (isFallenSurvivor(entity))
 	{
 		SDKHook(entity, SDKHook_TraceAttack, Fallen_TraceAttack);
-		if (g_iDebug)	PrintToChatAll("Hooked fallen survivor for head shot");
+		if (g_bDebug)	PrintToChatAll("Hooked fallen survivor for head shot");
 	}
 	else if (isJimmyGibbs(entity))
 	{
 		SDKHook(entity, SDKHook_TraceAttack, Fallen_TraceAttack);
-		if (g_iDebug)	PrintToChatAll("Hooked Jimmy Gibbs for head shot");
+		if (g_bDebug)	PrintToChatAll("Hooked Jimmy Gibbs for head shot");
 	}
 	
-	if (g_iDebug)
+	if (g_bDebug)
 	{
 		// if debugging listen to OTD from all infected
 		SDKHook(entity, SDKHook_OnTakeDamage, RiotCopOnTakeDamage);
@@ -141,13 +136,13 @@ public RiotCop_SpawnPost(entity)
 
 // Based on code from Mr. Zero
 // TODO: DealDamage instead of SDKHooks_TakeDamage?  TakeDamage seems unstable sometimes...
-public Action:RiotCop_TraceAttack(victim, &attacker, &inflictor, &Float:damage, &damagetype, &ammotype, hitbox, hitgroup)
+Action RiotCop_TraceAttack(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &ammotype, int hitbox, int hitgroup)
 {
-	if (g_iDebug) PrintToChatAll("RCTA: %d %d %d %f %x %x %d %d", victim, attacker, inflictor, damage, damagetype, ammotype, hitbox, hitgroup);
+	if (g_bDebug) PrintToChatAll("RCTA: %d %d %d %f %x %x %d %d", victim, attacker, inflictor, damage, damagetype, ammotype, hitbox, hitgroup);
 
 	if (!g_bEnabled || !IsValidEntity(victim) || !isValidSurvivor(attacker)) return Plugin_Continue;
 
-	new Float:newDamage = 0.0;
+	float newDamage = 0.0;
 
 	if (g_iRiotCopHeadShot_HeadEnable > 0 && hitgroup == 1) 
 	{
@@ -157,10 +152,10 @@ public Action:RiotCop_TraceAttack(victim, &attacker, &inflictor, &Float:damage, 
 //			newDamage = 50.0;
 			// It seems that sometimes SDKHooks_TakeDamage causes a crash if it kills a riot cop?  Switching to BecomeRagdoll...
 			AcceptEntityInput(victim, "BecomeRagdoll");
-			if (g_iDebug) PrintToChatAll("TA: Riot cop ragdolled (before %f, after %f) (%x %x %x)", damage, newDamage, damagetype, ammotype, hitbox);
+			if (g_bDebug) PrintToChatAll("TA: Riot cop ragdolled (before %f, after %f) (%x %x %x)", damage, newDamage, damagetype, ammotype, hitbox);
 			return Plugin_Continue;
 		}
-		if (g_iDebug) PrintToChatAll("TA: Riot cop head shot (before %f, after %f) (%x %x %x)", damage, newDamage, damagetype, ammotype, hitbox);
+		if (g_bDebug) PrintToChatAll("TA: Riot cop head shot (before %f, after %f) (%x %x %x)", damage, newDamage, damagetype, ammotype, hitbox);
 	}
 	else if (g_fRiotCopHeadShot_BodyDivisor > 0.9)
 	{
@@ -173,7 +168,7 @@ public Action:RiotCop_TraceAttack(victim, &attacker, &inflictor, &Float:damage, 
 		{
 			newDamage = damage / g_fRiotCopHeadShot_BodyDivisor;		
 		}
-		if (g_iDebug) PrintToChatAll("TA: Riot cop body shot (before %f, after %f) (%x %x %x)", damage, newDamage, damagetype, ammotype, hitbox);
+		if (g_bDebug) PrintToChatAll("TA: Riot cop body shot (before %f, after %f) (%x %x %x)", damage, newDamage, damagetype, ammotype, hitbox);
 	}
 	
 	// Do not return Plugin_Changed, because this would then affect body shots from the back
@@ -185,12 +180,12 @@ public Action:RiotCop_TraceAttack(victim, &attacker, &inflictor, &Float:damage, 
 	return Plugin_Continue;
 }  
 
-public Action:Fallen_TraceAttack(victim, &attacker, &inflictor, &Float:damage, &damagetype, &ammotype, hitbox, hitgroup)
+Action Fallen_TraceAttack(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &ammotype, int hitbox, int hitgroup)
 {
 	// A multiplier of 1.0 will disable this feature
 	if (g_bEnabled && isValidSurvivor(attacker) && IsValidEntity(victim) && hitgroup == 1 && g_fFallenHeadMultiplier > 1.0) 
 	{
-		new Float:newDamage = damage * g_fFallenHeadMultiplier;
+		float newDamage = damage * g_fFallenHeadMultiplier;
 		
 		// Jimmy Gibbs has even more health, and penetrating bullets kill him in one shot to the body
 		// So penetrating bullets to the head will also kill him in one shot
@@ -198,8 +193,8 @@ public Action:Fallen_TraceAttack(victim, &attacker, &inflictor, &Float:damage, &
 		{
 			newDamage = 3000.0;
 		}
-		
-		if (g_iDebug)
+
+		if (g_bDebug)
 		{
 			if (isFallenSurvivor(victim))	PrintToChatAll("TA: Fallen head shot (before %f, after %f)", damage, newDamage);
 			else if (isJimmyGibbs(victim))	PrintToChatAll("TA: Jimmy Gibbs head shot (before %f, after %f)", damage, newDamage);
@@ -213,28 +208,26 @@ public Action:Fallen_TraceAttack(victim, &attacker, &inflictor, &Float:damage, &
 }  
 
 // If debugging,  listen to IH (it will hear witches, while OTD will not)
-public Action:Event_InfectedHurt(Handle:event, const String:name[], bool:dontBroadcast)
+Action Event_InfectedHurt(Event event, const char[] name, bool dontBroadcast)
 {
-	if (g_iDebug)
+	if (g_bDebug)
 	{
-		new entityid = GetEventInt(event, "entityid");
-		if (isRiotCop(entityid)) PrintToChatAll("IH: Hit riot cop in the %d for %d damage (%d remaining)", GetEventInt(event, "hitgroup"), GetEventInt(event, "amount"), GetEntProp(entityid, Prop_Data, "m_iHealth"));
-		else if (isFallenSurvivor(entityid)) PrintToChatAll("IH: Hit fallen survivor in the %d for %d damage (%d remaining)", GetEventInt(event, "hitgroup"), GetEventInt(event, "amount"), GetEntProp(entityid, Prop_Data, "m_iHealth"));
-		else if (isJimmyGibbs(entityid)) PrintToChatAll("IH: Hit Jimmy Gibbs in the %d for %d damage (%d remaining)", GetEventInt(event, "hitgroup"), GetEventInt(event, "amount"), GetEntProp(entityid, Prop_Data, "m_iHealth"));
-		else PrintToChatAll("IH: Hit infected in the %d for %d damage (%d remaining)", GetEventInt(event, "hitgroup"), GetEventInt(event, "amount"), GetEntProp(entityid, Prop_Data, "m_iHealth"));
+		int entityid = event.GetInt("entityid");
+		if (isRiotCop(entityid)) PrintToChatAll("IH: Hit riot cop in the %d for %d damage (%d remaining)", event.GetInt("hitgroup"), event.GetInt("amount"), GetEntProp(entityid, Prop_Data, "m_iHealth"));
+		else if (isFallenSurvivor(entityid)) PrintToChatAll("IH: Hit fallen survivor in the %d for %d damage (%d remaining)", event.GetInt("hitgroup"), event.GetInt("amount"), GetEntProp(entityid, Prop_Data, "m_iHealth"));
+		else if (isJimmyGibbs(entityid)) PrintToChatAll("IH: Hit Jimmy Gibbs in the %d for %d damage (%d remaining)", event.GetInt("hitgroup"), event.GetInt("amount"), GetEntProp(entityid, Prop_Data, "m_iHealth"));
+		else PrintToChatAll("IH: Hit infected in the %d for %d damage (%d remaining)", event.GetInt("hitgroup"), event.GetInt("amount"), GetEntProp(entityid, Prop_Data, "m_iHealth"));
 	}
+	return Plugin_Continue;
 }
 
 // OTD has access to different debugging data
-public Action:RiotCopOnTakeDamage(victim, &attacker, &inflictor, &Float:damage, &damagetype, &weapon, Float:damageForce[3], Float:damagePosition[3])
+Action RiotCopOnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
 {
-	if (g_iDebug)
+	if (g_bDebug)
 	{
-		decl String:victimName[MAX_TARGET_LENGTH] = "Unconnected";
-		decl String:attackerName[MAX_TARGET_LENGTH] = "Unconnected";
-		decl String:inflictorName[32] = "Invalid";
-		decl String:weaponName[32] = "Invalid";
-		
+		char victimName[MAX_TARGET_LENGTH] = "Unconnected", attackerName[MAX_TARGET_LENGTH] = "Unconnected", inflictorName[32] = "Invalid", weaponName[32] = "Invalid";
+
 		if (victim > 0 && victim <= MaxClients)
 		{
 			if (IsClientConnected(victim))
@@ -275,31 +268,31 @@ public Action:RiotCopOnTakeDamage(victim, &attacker, &inflictor, &Float:damage, 
 	return Plugin_Continue;
 }
 
-stock bool:isValidSurvivor(client)
+stock bool isValidSurvivor(int client)
 {
-	return !(client <= 0 || client > MaxClients || !IsClientConnected(client) || !IsClientInGame(client) || GetClientTeam(client) != 2 || !IsPlayerAlive(client));
+	return client > 0 && client <= MaxClients && IsClientConnected(client) && IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client);
 }
 
-stock bool:isRiotCop(entity)
+stock bool isRiotCop(int entity)
 {
 	if (entity <= 0 || entity > 2048 || !IsValidEntity(entity)) return false;
-	decl String:model[128];
+	char model[128];
 	GetEntPropString(entity, Prop_Data, "m_ModelName", model, sizeof(model));
 	return StrContains(model, "riot") != -1; // Common is a riot uncommon
 }
 
-stock bool:isFallenSurvivor(entity)
+stock bool isFallenSurvivor(int entity)
 {
 	if (entity <= 0 || entity > 2048 || !IsValidEntity(entity)) return false;
-	decl String:model[128];
+	char model[128];
 	GetEntPropString(entity, Prop_Data, "m_ModelName", model, sizeof(model));
 	return StrContains(model, "fallen") != -1; // Common is a fallen uncommon
 }
 
-stock bool:isJimmyGibbs(entity)
+stock bool isJimmyGibbs(int entity)
 {
 	if (entity <= 0 || entity > 2048 || !IsValidEntity(entity)) return false;
-	decl String:model[128];
+	char model[128];
 	GetEntPropString(entity, Prop_Data, "m_ModelName", model, sizeof(model));
 	return StrContains(model, "jimmy") != -1; // Common is a Jimmy Gibbs
 }
